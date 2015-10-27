@@ -82,7 +82,7 @@ describe('traverseAllChildren', function() {
     );
     expect(traverseContext.length).toEqual(1);
     expect(console.error.calls.length).toBe(1);
-    expect(console.error.calls[0].args[0]).toContain('Warning: Each child in an array or iterator should have a unique "key" prop.');
+    expect(console.error.argsForCall[0][0]).toContain('Warning: Each child in an array or iterator should have a unique "key" prop.');
   });
 
   it('should be called for each child', function() {
@@ -326,7 +326,7 @@ describe('traverseAllChildren', function() {
     );
 
     expect(console.error.calls.length).toBe(1);
-    expect(console.error.calls[0].args[0]).toContain('Warning: Each child in an array or iterator should have a unique "key" prop.');
+    expect(console.error.argsForCall[0][0]).toContain('Warning: Each child in an array or iterator should have a unique "key" prop.');
   });
 
   it('should be called for each child in an iterable with keys', function() {
@@ -480,10 +480,10 @@ describe('traverseAllChildren', function() {
     expect(function() {
       traverseAllChildren({a: 1, b: 2}, function() {}, null);
     }).toThrow(
-      'Invariant Violation: Objects are not valid as a React child (found: ' +
-      'object with keys {a, b}). If you meant to render a collection of ' +
-      'children, use an array instead or wrap the object using ' +
-      'createFragment(object) from the React add-ons.'
+      'Objects are not valid as a React child (found: object with keys ' +
+      '{a, b}). If you meant to render a collection of children, use an ' +
+      'array instead or wrap the object using createFragment(object) from ' +
+      'the React add-ons.'
     );
   });
 
@@ -493,10 +493,9 @@ describe('traverseAllChildren', function() {
     expect(function() {
       traverseAllChildren(/abc/, function() {}, null);
     }).toThrow(
-      'Invariant Violation: Objects are not valid as a React child (found: ' +
-      '/abc/). If you meant to render a collection of children, use an array ' +
-      'instead or wrap the object using createFragment(object) from the ' +
-      'React add-ons.'
+      'Objects are not valid as a React child (found: /abc/). If you meant ' +
+      'to render a collection of children, use an array instead or wrap the ' +
+      'object using createFragment(object) from the React add-ons.'
     );
   });
 

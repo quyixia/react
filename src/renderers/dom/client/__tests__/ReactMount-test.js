@@ -37,8 +37,7 @@ describe('ReactMount', function() {
       expect(function() {
         ReactDOM.unmountComponentAtNode(nodeArray);
       }).toThrow(
-        'Invariant Violation: unmountComponentAtNode(...): Target container ' +
-        'is not a DOM element.'
+        'unmountComponentAtNode(...): Target container is not a DOM element.'
       );
     });
   });
@@ -47,9 +46,9 @@ describe('ReactMount', function() {
     expect(function() {
       ReactTestUtils.renderIntoDocument('div');
     }).toThrow(
-      'Invariant Violation: ReactDOM.render(): Invalid component element. ' +
-      'Instead of passing an element string, make sure to instantiate it ' +
-      'by passing it to React.createElement.'
+      'ReactDOM.render(): Invalid component element. Instead of passing an ' +
+      'element string, make sure to instantiate it by passing it to ' +
+      'React.createElement.'
     );
   });
 
@@ -62,9 +61,9 @@ describe('ReactMount', function() {
     expect(function() {
       ReactTestUtils.renderIntoDocument(Component);
     }).toThrow(
-      'Invariant Violation: ReactDOM.render(): Invalid component element. ' +
-      'Instead of passing a component class, make sure to instantiate it ' +
-      'by passing it to React.createElement.'
+      'ReactDOM.render(): Invalid component element. Instead of passing a ' +
+      'component class, make sure to instantiate it by passing it to ' +
+      'React.createElement.'
     );
   });
 
@@ -153,7 +152,7 @@ describe('ReactMount', function() {
     ReactMount.render(<div />, iFrame.contentDocument.body);
 
     expect(console.error.calls.length).toBe(1);
-    expect(console.error.calls[0].args[0]).toContain(
+    expect(console.error.argsForCall[0][0]).toContain(
       'Rendering components directly into document.body is discouraged'
     );
   });
@@ -170,7 +169,7 @@ describe('ReactMount', function() {
       div
     );
     expect(console.error.calls.length).toBe(1);
-    expect(console.error.calls[0].args[0]).toContain(
+    expect(console.error.argsForCall[0][0]).toContain(
       ' (client) nbsp entity: &nbsp; client text</div>\n' +
       ' (server) nbsp entity: &nbsp; server text</div>'
     );
@@ -237,12 +236,67 @@ describe('ReactMount', function() {
     spyOn(console, 'error');
     var rootNode = container.firstChild;
     ReactDOM.render(<span />, rootNode);
-    expect(console.error.callCount).toBe(1);
-    expect(console.error.mostRecentCall.args[0]).toBe(
+    expect(console.error.calls.length).toBe(1);
+    expect(console.error.argsForCall[0][0]).toBe(
       'Warning: render(...): Replacing React-rendered children with a new ' +
       'root component. If you intended to update the children of this node, ' +
       'you should instead have the existing children update their state and ' +
       'render the new components instead of calling ReactDOM.render.'
     );
+  });
+
+  it('should not crash in node cache when unmounting', function() {
+    var Component = React.createClass({
+      render: function() {
+        // Add refs to some nodes so that they get traversed and cached
+        return (
+          <div ref="a">
+            <div ref="b">b</div>
+            {this.props.showC && <div>c</div>}
+          </div>
+        );
+      },
+    });
+
+    var container = document.createElement('container');
+
+    ReactDOM.render(<div><Component showC={false} /></div>, container);
+
+    // Right now, A and B are in the cache. When we add C, it won't get added to
+    // the cache (assuming markup-string mode).
+    ReactDOM.render(<div><Component showC={true} /></div>, container);
+
+    // Remove A, B, and C. Unmounting C shouldn't cause B to get recached.
+    ReactDOM.render(<div></div>, container);
+
+    // Add them back -- this shouldn't cause a cached node collision.
+    ReactDOM.render(<div><Component showC={true} /></div>, container);
+
+    ReactDOM.unmountComponentAtNode(container);
+  });
+
+  it('should not crash in node cache when unmounting, case 2', function() {
+    var A = React.createClass({
+      render: function() {
+        return <a key={this.props.innerKey}>{this.props.innerKey}</a>;
+      },
+    });
+    var Component = React.createClass({
+      render: function() {
+        return (
+          <b>
+            <i>{this.props.step === 1 && <q />}</i>
+            {this.props.step === 1 && <A innerKey={this.props.step} />}
+          </b>
+        );
+      },
+    });
+
+    var container = document.createElement('container');
+
+    ReactDOM.render(<Component step={1} />, container);
+    ReactDOM.render(<Component step={2} />, container);
+    ReactDOM.render(<Component step={1} />, container);
+    ReactMount.getID(container.querySelector('a'));
   });
 });

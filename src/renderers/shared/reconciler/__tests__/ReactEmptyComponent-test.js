@@ -75,9 +75,8 @@ describe('ReactEmptyComponent', function() {
     expect(function() {
       ReactTestUtils.renderIntoDocument(<Component />);
     }).toThrow(
-      'Invariant Violation: Component.render(): A valid ReactComponent must ' +
-      'be returned. You may have returned undefined, an array or some other ' +
-      'invalid object.'
+      'Component.render(): A valid ReactComponent must be returned. You may ' +
+      'have returned undefined, an array or some other invalid object.'
     );
   });
 
@@ -136,7 +135,8 @@ describe('ReactEmptyComponent', function() {
   );
 
   it('should have getDOMNode return null when multiple layers of composite ' +
-    'components render to the same null placeholder', () => {
+    'components render to the same null placeholder',
+    () => {
       spyOn(console, 'log');
 
       var GrandChild = React.createClass({
@@ -226,7 +226,7 @@ describe('ReactEmptyComponent', function() {
     expect(function() {
       ReactDOM.render(null, div);
     }).toThrow(
-      'Invariant Violation: ReactDOM.render(): Invalid component element.'
+      'ReactDOM.render(): Invalid component element.'
     );
   });
 

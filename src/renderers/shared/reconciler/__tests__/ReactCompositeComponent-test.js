@@ -459,11 +459,10 @@ describe('ReactCompositeComponent', function() {
     expect(function() {
       innerInstance.setProps({value: 1});
     }).toThrow(
-      'Invariant Violation: setProps(...): You called `setProps` on a ' +
-      'component with a parent. This is an anti-pattern since props will get ' +
-      'reactively updated when rendered. Instead, change the owner\'s ' +
-      '`render` method to pass the correct value as props to the component ' +
-      'where it is created.'
+      'setProps(...): You called `setProps` on a component with a parent. ' +
+      'This is an anti-pattern since props will get reactively updated when ' +
+      'rendered. Instead, change the owner\'s `render` method to pass the ' +
+      'correct value as props to the component where it is created.'
     );
   });
 
@@ -522,7 +521,7 @@ describe('ReactCompositeComponent', function() {
     // unmountIDFromEnvironment which calls purgeID, for a total of 3.
     // TODO: Test the effect of this. E.g. does the node cache get repopulated
     // after a getDOMNode call?
-    expect(ReactMount.purgeID.callCount).toBe(3);
+    expect(ReactMount.purgeID.calls.length).toBe(3);
   });
 
   it('should warn when shouldComponentUpdate() returns undefined', function() {
@@ -1075,7 +1074,7 @@ describe('ReactCompositeComponent', function() {
       ReactTestUtils.renderIntoDocument(<div><NotAComponent /></div>);
     }).toThrow();  // has no method 'render'
     expect(console.error.calls.length).toBe(1);
-    expect(console.error.calls[0].args[0]).toContain(
+    expect(console.error.argsForCall[0][0]).toContain(
       'NotAComponent(...): No `render` method found'
     );
   });

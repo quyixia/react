@@ -16,10 +16,13 @@
 
 var AutoFocusUtils = require('AutoFocusUtils');
 var CSSPropertyOperations = require('CSSPropertyOperations');
+var DOMLazyTree = require('DOMLazyTree');
 var DOMNamespaces = require('DOMNamespaces');
 var DOMProperty = require('DOMProperty');
 var DOMPropertyOperations = require('DOMPropertyOperations');
 var EventConstants = require('EventConstants');
+var EventPluginHub = require('EventPluginHub');
+var EventPluginRegistry = require('EventPluginRegistry');
 var ReactBrowserEventEmitter = require('ReactBrowserEventEmitter');
 var ReactComponentBrowserEnvironment =
   require('ReactComponentBrowserEnvironment');
@@ -39,15 +42,13 @@ var escapeTextContentForBrowser = require('escapeTextContentForBrowser');
 var invariant = require('invariant');
 var isEventSupported = require('isEventSupported');
 var keyOf = require('keyOf');
-var setInnerHTML = require('setInnerHTML');
-var setTextContent = require('setTextContent');
 var shallowEqual = require('shallowEqual');
 var validateDOMNesting = require('validateDOMNesting');
 var warning = require('warning');
 
-var deleteListener = ReactBrowserEventEmitter.deleteListener;
+var deleteListener = EventPluginHub.deleteListener;
 var listenTo = ReactBrowserEventEmitter.listenTo;
-var registrationNameModules = ReactBrowserEventEmitter.registrationNameModules;
+var registrationNameModules = EventPluginRegistry.registrationNameModules;
 
 // For quickly matching children type, to test if can be treated as content.
 var CONTENT_TYPES = {'string': true, 'number': true};
@@ -312,7 +313,7 @@ function enqueuePutListener(id, registrationName, listener, transaction) {
 
 function putListener() {
   var listenerToPut = this;
-  ReactBrowserEventEmitter.putListener(
+  EventPluginHub.putListener(
     listenerToPut.id,
     listenerToPut.registrationName,
     listenerToPut.listener
@@ -410,6 +411,17 @@ function trapBubbledEventsLocal() {
         ReactBrowserEventEmitter.trapBubbledEvent(
           EventConstants.topLevelTypes.topSubmit,
           'submit',
+          node
+        ),
+      ];
+      break;
+    case 'input':
+    case 'select':
+    case 'textarea':
+      inst._wrapperState.listeners = [
+        ReactBrowserEventEmitter.trapBubbledEvent(
+          EventConstants.topLevelTypes.topInvalid,
+          'invalid',
           node
         ),
       ];
@@ -568,6 +580,7 @@ ReactDOMComponent.Mixin = {
       case 'input':
         ReactDOMInput.mountWrapper(this, props, nativeParent);
         props = ReactDOMInput.getNativeProps(this, props);
+        transaction.getReactMountReady().enqueue(trapBubbledEventsLocal, this);
         break;
       case 'option':
         ReactDOMOption.mountWrapper(this, props, nativeParent);
@@ -576,10 +589,12 @@ ReactDOMComponent.Mixin = {
       case 'select':
         ReactDOMSelect.mountWrapper(this, props, nativeParent);
         props = ReactDOMSelect.getNativeProps(this, props);
+        transaction.getReactMountReady().enqueue(trapBubbledEventsLocal, this);
         break;
       case 'textarea':
         ReactDOMTextarea.mountWrapper(this, props, nativeParent);
         props = ReactDOMTextarea.getNativeProps(this, props);
+        transaction.getReactMountReady().enqueue(trapBubbledEventsLocal, this);
         break;
     }
 
@@ -630,7 +645,16 @@ ReactDOMComponent.Mixin = {
       var ownerDocument = nativeContainerInfo._ownerDocument;
       var el;
       if (namespaceURI === DOMNamespaces.html) {
-        el = ownerDocument.createElement(this._currentElement.type);
+        if (this._tag === 'script') {
+          // Create the script via .innerHTML so its "parser-inserted" flag is
+          // set to true and it does not execute
+          var div = ownerDocument.createElement('div');
+          var type = this._currentElement.type;
+          div.innerHTML = `<${type}></${type}>`;
+          el = div.removeChild(div.firstChild);
+        } else {
+          el = ownerDocument.createElement(this._currentElement.type);
+        }
       } else {
         el = ownerDocument.createElementNS(
           namespaceURI,
@@ -641,9 +665,10 @@ ReactDOMComponent.Mixin = {
       DOMPropertyOperations.setAttributeForID(el, this._rootNodeID);
       // Populate node cache
       ReactMount.getID(el);
-      this._updateDOMProperties({}, props, transaction);
-      this._createInitialChildren(transaction, props, context, el);
-      mountImage = el;
+      this._updateDOMProperties(null, props, transaction);
+      var lazyTree = DOMLazyTree(el);
+      this._createInitialChildren(transaction, props, context, lazyTree);
+      mountImage = lazyTree;
     } else {
       var tagOpen = this._createOpenTagMarkupAndPutListeners(transaction, props);
       var tagContent = this._createContentMarkup(transaction, props, context);
@@ -714,7 +739,7 @@ ReactDOMComponent.Mixin = {
             }
             propValue = this._previousStyleCopy = assign({}, props.style);
           }
-          propValue = CSSPropertyOperations.createMarkupForStyles(propValue);
+          propValue = CSSPropertyOperations.createMarkupForStyles(propValue, this);
         }
         var markup = null;
         if (this._tag != null && isCustomComponent(this._tag, props)) {
@@ -789,12 +814,12 @@ ReactDOMComponent.Mixin = {
     }
   },
 
-  _createInitialChildren: function(transaction, props, context, el) {
+  _createInitialChildren: function(transaction, props, context, lazyTree) {
     // Intentional use of != to avoid catching zero/false.
     var innerHTML = props.dangerouslySetInnerHTML;
     if (innerHTML != null) {
       if (innerHTML.__html != null) {
-        setInnerHTML(el, innerHTML.__html);
+        DOMLazyTree.queueHTML(lazyTree, innerHTML.__html);
       }
     } else {
       var contentToUse =
@@ -802,7 +827,7 @@ ReactDOMComponent.Mixin = {
       var childrenToUse = contentToUse != null ? null : props.children;
       if (contentToUse != null) {
         // TODO: Validate that text is allowed as a child of this node
-        setTextContent(el, contentToUse);
+        DOMLazyTree.queueText(lazyTree, contentToUse);
       } else if (childrenToUse != null) {
         var mountImages = this.mountChildren(
           childrenToUse,
@@ -810,7 +835,7 @@ ReactDOMComponent.Mixin = {
           context
         );
         for (var i = 0; i < mountImages.length; i++) {
-          el.appendChild(mountImages[i]);
+          DOMLazyTree.queueChild(lazyTree, mountImages[i]);
         }
       }
     }
@@ -911,7 +936,8 @@ ReactDOMComponent.Mixin = {
     var styleUpdates;
     for (propKey in lastProps) {
       if (nextProps.hasOwnProperty(propKey) ||
-         !lastProps.hasOwnProperty(propKey)) {
+         !lastProps.hasOwnProperty(propKey) ||
+         lastProps[propKey] == null) {
         continue;
       }
       if (propKey === STYLE) {
@@ -938,10 +964,12 @@ ReactDOMComponent.Mixin = {
     }
     for (propKey in nextProps) {
       var nextProp = nextProps[propKey];
-      var lastProp = propKey === STYLE ?
-        this._previousStyleCopy :
-        lastProps[propKey];
-      if (!nextProps.hasOwnProperty(propKey) || nextProp === lastProp) {
+      var lastProp =
+        propKey === STYLE ? this._previousStyleCopy :
+        lastProps != null ? lastProps[propKey] : undefined;
+      if (!nextProps.hasOwnProperty(propKey) ||
+          nextProp === lastProp ||
+          nextProp == null && lastProp == null) {
         continue;
       }
       if (propKey === STYLE) {
@@ -1059,6 +1087,10 @@ ReactDOMComponent.Mixin = {
     }
   },
 
+  getNativeNode: function() {
+    return getNode(this);
+  },
+
   /**
    * Destroys all event registrations for this instance. Does not remove from
    * the DOM. That must be done by the parent.
@@ -1103,19 +1135,16 @@ ReactDOMComponent.Mixin = {
         break;
     }
 
-    var nativeNode = getNode(this);
-    this._nativeNode = null;
     if (this._nodeHasLegacyProperties) {
-      nativeNode._reactInternalComponent = null;
+      this._nativeNode._reactInternalComponent = null;
     }
+    this._nativeNode = null;
 
     this.unmountChildren();
-    ReactBrowserEventEmitter.deleteAllListeners(this._rootNodeID);
+    EventPluginHub.deleteAllListeners(this._rootNodeID);
     ReactComponentBrowserEnvironment.unmountIDFromEnvironment(this._rootNodeID);
     this._rootNodeID = null;
     this._wrapperState = null;
-
-    return nativeNode;
   },
 
   getPublicInstance: function() {
@@ -1162,5 +1191,9 @@ assign(
   ReactDOMComponent.Mixin,
   ReactMultiChild.Mixin
 );
+
+assign(ReactDOMComponent, {
+  getNodeFromInstance: getNode,
+});
 
 module.exports = ReactDOMComponent;
