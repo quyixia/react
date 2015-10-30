@@ -11,8 +11,6 @@
 
 'use strict';
 
-var mocks = require('mocks');
-
 describe('ReactMount', function() {
   var React = require('React');
   var ReactDOM = require('ReactDOM');
@@ -81,8 +79,8 @@ describe('ReactMount', function() {
   it('should unmount and remount if the key changes', function() {
     var container = document.createElement('container');
 
-    var mockMount = mocks.getMockFunction();
-    var mockUnmount = mocks.getMockFunction();
+    var mockMount = jest.genMockFn();
+    var mockUnmount = jest.genMockFn();
 
     var Component = React.createClass({
       componentDidMount: mockMount,
@@ -199,9 +197,9 @@ describe('ReactMount', function() {
   }
 
   it('warns when using two copies of React before throwing', function() {
-    require('mock-modules').dumpCache();
+    jest.resetModuleRegistry();
     var RD1 = require('ReactDOM');
-    require('mock-modules').dumpCache();
+    jest.resetModuleRegistry();
     var RD2 = require('ReactDOM');
 
     var X = React.createClass({
@@ -298,5 +296,45 @@ describe('ReactMount', function() {
     ReactDOM.render(<Component step={2} />, container);
     ReactDOM.render(<Component step={1} />, container);
     ReactMount.getID(container.querySelector('a'));
+  });
+
+  it('passes the correct callback context', function() {
+    var container = document.createElement('div');
+    var calls = 0;
+
+    ReactDOM.render(<div />, container, function() {
+      expect(this.nodeName).toBe('DIV');
+      calls++;
+    });
+
+    // Update, no type change
+    ReactDOM.render(<div />, container, function() {
+      expect(this.nodeName).toBe('DIV');
+      calls++;
+    });
+
+    // Update, type change
+    ReactDOM.render(<span />, container, function() {
+      expect(this.nodeName).toBe('SPAN');
+      calls++;
+    });
+
+    // Batched update, no type change
+    ReactDOM.unstable_batchedUpdates(function() {
+      ReactDOM.render(<span />, container, function() {
+        expect(this.nodeName).toBe('SPAN');
+        calls++;
+      });
+    });
+
+    // Batched update, type change
+    ReactDOM.unstable_batchedUpdates(function() {
+      ReactDOM.render(<article />, container, function() {
+        expect(this.nodeName).toBe('ARTICLE');
+        calls++;
+      });
+    });
+
+    expect(calls).toBe(5);
   });
 });

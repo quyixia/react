@@ -6,19 +6,17 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule canDefineProperty
+ * @providesModule ReactElementTestChild
  */
 
 'use strict';
 
-var canDefineProperty = false;
-if (__DEV__) {
-  try {
-    Object.defineProperty({}, 'x', {get: function() {}});
-    canDefineProperty = true;
-  } catch (x) {
-    // IE will fail on defineProperty
-  }
-}
+var React = require('React');
 
-module.exports = canDefineProperty;
+var Child = React.createClass({
+  render: function() {
+    return React.createElement('div');
+  },
+});
+
+module.exports = Child;
