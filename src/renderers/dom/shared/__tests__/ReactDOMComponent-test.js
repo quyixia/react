@@ -51,7 +51,7 @@ describe('ReactDOMComponent', function() {
       var stubStyle = container.firstChild.style;
 
       // set initial style
-      var setup = {display: 'block', left: '1', top: 2, fontFamily: 'Arial'};
+      var setup = {display: 'block', left: '1px', top: 2, fontFamily: 'Arial'};
       ReactDOM.render(<div style={setup} />, container);
       expect(stubStyle.display).toEqual('block');
       expect(stubStyle.left).toEqual('1px');
@@ -152,7 +152,9 @@ describe('ReactDOMComponent', function() {
       var div = document.createElement('div');
       var One = React.createClass({
         render: function() {
-          return this.props.inline ? <span style={{fontSize: '1'}} /> : <div style={{fontSize: '1'}} />;
+          return this.props.inline ?
+            <span style={{fontSize: '1'}} /> :
+            <div style={{fontSize: '1'}} />;
         },
       });
       var Two = React.createClass({
@@ -235,6 +237,18 @@ describe('ReactDOMComponent', function() {
 
       ReactDOM.render(<div style={null} />, container);
       expect(stubStyle.display).toEqual('');
+    });
+
+    it('should skip child object attribute on web components', function() {
+      var container = document.createElement('div');
+
+      // Test intial render to null
+      ReactDOM.render(<my-component children={['foo']} />, container);
+      expect(container.firstChild.hasAttribute('children')).toBe(false);
+
+      // Test updates to null
+      ReactDOM.render(<my-component children={['foo']} />, container);
+      expect(container.firstChild.hasAttribute('children')).toBe(false);
     });
 
     it('should remove attributes', function() {
@@ -439,6 +453,40 @@ describe('ReactDOMComponent', function() {
       expect(setter.mock.calls.length).toBe(0);
       ReactDOM.render(<div dir="ltr" />, container);
       expect(setter.mock.calls.length).toBe(1);
+    });
+
+    it('handles multiple child updates without interference', function() {
+      // This test might look like it's just testing ReactMultiChild but the
+      // last bug in this was actually in DOMChildrenOperations so this test
+      // needs to be in some DOM-specific test file.
+      var container = document.createElement('div');
+
+      // ABCD
+      ReactDOM.render(
+        <div>
+          <div key="one">
+            <div key="A">A</div><div key="B">B</div>
+          </div>
+          <div key="two">
+            <div key="C">C</div><div key="D">D</div>
+          </div>
+        </div>,
+        container
+      );
+      // BADC
+      ReactDOM.render(
+        <div>
+          <div key="one">
+            <div key="B">B</div><div key="A">A</div>
+          </div>
+          <div key="two">
+            <div key="D">D</div><div key="C">C</div>
+          </div>
+        </div>,
+        container
+      );
+
+      expect(container.textContent).toBe('BADC');
     });
   });
 
@@ -829,7 +877,7 @@ describe('ReactDOMComponent', function() {
   describe('unmountComponent', function() {
     it('should clean up listeners', function() {
       var EventPluginHub = require('EventPluginHub');
-      var ReactMount = require('ReactMount');
+      var ReactDOMComponentTree = require('ReactDOMComponentTree');
 
       var container = document.createElement('div');
       document.body.appendChild(container);
@@ -839,17 +887,33 @@ describe('ReactDOMComponent', function() {
       instance = ReactDOM.render(instance, container);
 
       var rootNode = ReactDOM.findDOMNode(instance);
-      var rootNodeID = ReactMount.getID(rootNode);
+      var inst = ReactDOMComponentTree.getInstanceFromNode(rootNode);
       expect(
-        EventPluginHub.getListener(rootNodeID, 'onClick')
+        EventPluginHub.getListener(inst, 'onClick')
       ).toBe(callback);
       expect(rootNode).toBe(ReactDOM.findDOMNode(instance));
 
       ReactDOM.unmountComponentAtNode(container);
 
       expect(
-        EventPluginHub.getListener(rootNodeID, 'onClick')
+        EventPluginHub.getListener(inst, 'onClick')
       ).toBe(undefined);
+    });
+
+    it('unmounts children before unsetting DOM node info', function() {
+      var Inner = React.createClass({
+        render: function() {
+          return <span />;
+        },
+        componentWillUnmount: function() {
+          // Should not throw
+          expect(ReactDOM.findDOMNode(this).nodeName).toBe('SPAN');
+        },
+      });
+
+      var container = document.createElement('div');
+      ReactDOM.render(<div><Inner /></div>, container);
+      ReactDOM.unmountComponentAtNode(container);
     });
   });
 
@@ -1022,88 +1086,6 @@ describe('ReactDOMComponent', function() {
       expect(console.error.argsForCall[5][0]).toContain(
         'See Link > a > ... > Link > a.'
       );
-    });
-  });
-
-  describe('DOM nodes as refs', function() {
-    var ReactTestUtils;
-
-    beforeEach(function() {
-      ReactTestUtils = require('ReactTestUtils');
-    });
-
-    it('warns when accessing properties on DOM components', function() {
-      spyOn(console, 'error');
-      var innerDiv;
-      var Animal = React.createClass({
-        render: function() {
-          return <div ref="div">iguana</div>;
-        },
-        componentDidMount: function() {
-          innerDiv = this.refs.div;
-
-          void this.refs.div.props;
-          this.refs.div.setState();
-          expect(this.refs.div.getDOMNode()).toBe(this.refs.div);
-          expect(this.refs.div.isMounted()).toBe(true);
-        },
-      });
-      var container = document.createElement('div');
-      ReactDOM.render(<Animal />, container);
-      ReactDOM.unmountComponentAtNode(container);
-      expect(innerDiv.isMounted()).toBe(false);
-
-      expect(console.error.calls.length).toBe(5);
-      expect(console.error.argsForCall[0][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .props of a DOM ' +
-        'node; instead, recreate the props as `render` did originally or ' +
-        'read the DOM properties/attributes directly from this node (e.g., ' +
-        'this.refs.box.className). This DOM node was rendered by `Animal`.'
-      );
-      expect(console.error.argsForCall[1][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .setState(), ' +
-        '.replaceState(), or .forceUpdate() of a DOM node. This is a no-op. ' +
-        'This DOM node was rendered by `Animal`.'
-      );
-      expect(console.error.argsForCall[2][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .getDOMNode() of a DOM ' +
-        'node; instead, use the node directly. This DOM node was ' +
-        'rendered by `Animal`.'
-      );
-      expect(console.error.argsForCall[3][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .isMounted() of a DOM ' +
-        'node. This DOM node was rendered by `Animal`.'
-      );
-      expect(console.error.argsForCall[4][0]).toContain('isMounted');
-    });
-
-    it('handles legacy setProps and replaceProps', function() {
-      spyOn(console, 'error');
-      var node = ReactTestUtils.renderIntoDocument(<div>rhinoceros</div>);
-
-      node.setProps({className: 'herbiverous'});
-      expect(node.className).toBe('herbiverous');
-      expect(node.textContent).toBe('rhinoceros');
-
-      node.replaceProps({className: 'invisible rhino'});
-      expect(node.className).toBe('invisible rhino');
-      expect(node.textContent).toBe('');
-
-      expect(console.error.calls.length).toBe(2);
-      expect(console.error.argsForCall[0][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .setProps() of a DOM node. ' +
-        'Instead, call ReactDOM.render again at the top level.'
-      );
-      expect(console.error.argsForCall[1][0]).toBe(
-        'Warning: ReactDOMComponent: Do not access .replaceProps() of a DOM ' +
-        'node. Instead, call ReactDOM.render again at the top level.'
-      );
-    });
-
-    it('does not touch ref-less nodes', function() {
-      var node = ReactTestUtils.renderIntoDocument(<div><span /></div>);
-      expect(typeof node.getDOMNode).toBe('function');
-      expect(typeof node.firstChild.getDOMNode).toBe('undefined');
     });
   });
 });

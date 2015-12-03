@@ -15,9 +15,7 @@ React를 시작하는 가장 빠른 방법은 다음의 Hello World JSFiddle 예
 
 ## npm으로 React 사용하기
 
-React는 CommonJS 모듈과 유사한 시스템인 [browserify](http://browserify.org/) 또는 [webpack](https://webpack.github.io/)를 사용하기를 추천합니다.
-[`react`](https://www.npmjs.com/package/react) 와 [`react-dom`](https://www.npmjs.com/package/react-dom) npm
-패키지를 이용합니다.
+[browserify](http://browserify.org/), [webpack](https://webpack.github.io/) 같은 CommonJS 모듈 시스템과 함께 React를 사용하시는 것을 권장합니다. [`react`](https://www.npmjs.com/package/react), [`react-dom`](https://www.npmjs.com/package/react-dom) npm 패키지를 사용하세요.
 
 ```js
 // main.js
@@ -33,9 +31,13 @@ ReactDOM.render(
 browserify를 설치한 후에 React DOM을 설치하고 bundle을 빌드합니다.
 
 ```sh
-$ npm install --save react react-dom
-$ browserify -t babelify main.js -o bundle.js
+$ npm install --save react react-dom babelify babel-preset-react
+$ browserify -t [ babelify --presets [ react ] ] main.js -o bundle.js
 ```
+
+> 주의:
+>
+> ES2015를 사용하고 있다면, `babel-preset-es2015` 패키지도 설치할 필요가 있습니다.
 
 ## npm 없이 Quick Start 하기
 
@@ -43,7 +45,7 @@ $ browserify -t babelify main.js -o bundle.js
 
 <div class="buttons-unit downloads">
   <a href="/react/downloads/react-{{site.react_version}}.zip" class="button">
-    Download Starter Kit {{site.react_version}}
+   초심자용 키트 내려받기 {{site.react_version}}
   </a>
 </div>
 
@@ -71,7 +73,7 @@ $ browserify -t babelify main.js -o bundle.js
 </html>
 ```
 
-JavaScript 안에 보이는 XML 구문은 JSX라고 합니다; 더 자세한 내용은 [JSX syntax](/react/docs/jsx-in-depth-ko-KR.html)을 확인하세요. vanilla JavaScript로 번역하기 위해 `<script type="text/babel">`를 사용하고 Babel을 포함하는 것으로 실제로 브라우저에서 변환작업을 수행합니다.
+JavaScript 안에 보이는 XML 구문은 JSX라고 합니다; 더 자세한 내용은 [JSX syntax](/react/docs/jsx-in-depth-ko-KR.html)을 확인하세요. 일반적인 JavaScript로 번역하기 위해 `<script type="text/babel">`를 사용하고 Babel을 포함하는 것으로 실제로 브라우저에서 변환작업을 수행합니다.
 
 ### 파일의 분리
 
@@ -97,17 +99,21 @@ ReactDOM.render(
 먼저 [Babel](http://babeljs.io/) 커맨드라인 도구를 설치합니다. ([npm](https://www.npmjs.com/) 필요):
 
 ```
-npm install --global babel
+npm install --global babel-cli
+npm install babel-preset-react
 ```
 
 그다음, `src/helloworld.js` 파일을 일반 JavaScript 파일로 변환합니다:
 
 ```
-babel src --watch --out-dir build
-
+babel --presets react src --watch --out-dir build
 ```
 
-수정할 때마다 `build/helloworld.js` 파일이 자동생성됩니다. 더 깊이 사용하고 싶으면 [Babel CLI documentation](http://babeljs.io/docs/usage/cli/)를 읽어보세요.
+> 주의:
+>
+> ES2015를 사용하고 있다면, `babel-preset-es2015` 패키지도 설치할 필요가 있습니다.
+
+수정할 때마다 `build/helloworld.js` 파일이 자동생성됩니다. 더 자세한 사용법은 [Babel CLI 문서](http://babeljs.io/docs/usage/cli/)를 읽어보세요.
 
 ```javascript{2}
 ReactDOM.render(
@@ -126,7 +132,7 @@ ReactDOM.render(
     <title>Hello React!</title>
     <script src="build/react.js"></script>
     <script src="build/react-dom.js"></script>
-    <!-- No need for Babel! -->
+    <!-- Babel은 이제 불필요합니다! -->
   </head>
   <body>
     <div id="example"></div>

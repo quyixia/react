@@ -11,19 +11,17 @@
 
 'use strict';
 
-var ClientReactRootIndex = require('ClientReactRootIndex');
 var EventConstants = require('EventConstants');
 var EventPluginHub = require('EventPluginHub');
 var EventPluginRegistry = require('EventPluginRegistry');
 var EventPropagators = require('EventPropagators');
 var React = require('React');
 var ReactDOM = require('ReactDOM');
+var ReactDOMComponentTree = require('ReactDOMComponentTree');
 var ReactElement = require('ReactElement');
 var ReactBrowserEventEmitter = require('ReactBrowserEventEmitter');
 var ReactCompositeComponent = require('ReactCompositeComponent');
-var ReactInstanceHandles = require('ReactInstanceHandles');
 var ReactInstanceMap = require('ReactInstanceMap');
-var ReactMount = require('ReactMount');
 var ReactUpdates = require('ReactUpdates');
 var SyntheticEvent = require('SyntheticEvent');
 
@@ -209,8 +207,9 @@ var ReactTestUtils = {
     var all =
       ReactTestUtils.scryRenderedDOMComponentsWithClass(root, className);
     if (all.length !== 1) {
-      throw new Error('Did not find exactly one match ' +
-        '(found: ' + all.length + ') for class:' + className
+      throw new Error(
+        'Did not find exactly one match (found: ' + all.length + ') ' +
+        'for class:' + className
       );
     }
     return all[0];
@@ -238,8 +237,9 @@ var ReactTestUtils = {
   findRenderedDOMComponentWithTag: function(root, tagName) {
     var all = ReactTestUtils.scryRenderedDOMComponentsWithTag(root, tagName);
     if (all.length !== 1) {
-      throw new Error('Did not find exactly one match ' +
-        '(found ' + all.length + ') for tag:' + tagName
+      throw new Error(
+        'Did not find exactly one match (found: ' + all.length + ') ' +
+        'for tag:' + tagName
       );
     }
     return all[0];
@@ -272,8 +272,8 @@ var ReactTestUtils = {
     );
     if (all.length !== 1) {
       throw new Error(
-        'Did not find exactly one match for componentType:' + componentType +
-        ' (found ' + all.length + ')'
+        'Did not find exactly one match (found: ' + all.length + ') ' +
+        'for componentType:' + componentType
       );
     }
     return all[0];
@@ -362,14 +362,6 @@ var ReactShallowRenderer = function() {
   this._instance = null;
 };
 
-ReactShallowRenderer.prototype.getRenderOutput = function() {
-  return (
-    (this._instance && this._instance._renderedComponent &&
-     this._instance._renderedComponent._renderedOutput)
-    || null
-  );
-};
-
 ReactShallowRenderer.prototype.getMountedInstance = function() {
   return this._instance ? this._instance._instance : null;
 };
@@ -396,6 +388,9 @@ NoopInternalComponent.prototype = {
   unmountComponent: function() {
   },
 
+  getPublicInstance: function() {
+    return null;
+  },
 };
 
 var ShallowComponentWrapper = function() { };
@@ -432,9 +427,23 @@ ReactShallowRenderer.prototype.render = function(element, context) {
   if (!context) {
     context = emptyObject;
   }
-  var transaction = ReactUpdates.ReactReconcileTransaction.getPooled(false);
-  this._render(element, transaction, context);
+  ReactUpdates.batchedUpdates(_batchedRender, this, element, context);
+
+  return this.getRenderOutput();
+};
+
+function _batchedRender(renderer, element, context) {
+  var transaction = ReactUpdates.ReactReconcileTransaction.getPooled(true);
+  renderer._render(element, transaction, context);
   ReactUpdates.ReactReconcileTransaction.release(transaction);
+}
+
+ReactShallowRenderer.prototype.getRenderOutput = function() {
+  return (
+    (this._instance && this._instance._renderedComponent &&
+     this._instance._renderedComponent._renderedOutput)
+    || null
+  );
 };
 
 ReactShallowRenderer.prototype.unmount = function() {
@@ -447,13 +456,10 @@ ReactShallowRenderer.prototype._render = function(element, transaction, context)
   if (this._instance) {
     this._instance.receiveComponent(element, transaction, context);
   } else {
-    var rootID = ReactInstanceHandles.createReactRootID(
-      ClientReactRootIndex.createReactRootIndex()
-    );
     var instance = new ShallowComponentWrapper(element.type);
     instance.construct(element);
 
-    instance.mountComponent(rootID, transaction, null, null, context);
+    instance.mountComponent(transaction, null, null, context);
 
     this._instance = instance;
   }
@@ -470,6 +476,11 @@ ReactShallowRenderer.prototype._render = function(element, transaction, context)
 function makeSimulator(eventType) {
   return function(domComponentOrNode, eventData) {
     var node;
+    invariant(
+      !React.isValidElement(domComponentOrNode),
+      'TestUtils.Simulate expects a component instance and not a ReactElement.' +
+      'TestUtils.Simulate will not work if you are using shallow rendering.'
+    );
     if (ReactTestUtils.isDOMComponent(domComponentOrNode)) {
       node = findDOMNode(domComponentOrNode);
     } else if (domComponentOrNode.tagName) {
@@ -485,7 +496,7 @@ function makeSimulator(eventType) {
     // properly destroying any properties assigned from `eventData` upon release
     var event = new SyntheticEvent(
       dispatchConfig,
-      ReactMount.getID(node),
+      ReactDOMComponentTree.getInstanceFromNode(node),
       fakeNativeEvent,
       node
     );

@@ -120,14 +120,15 @@ var ReactCompositeComponentMixin = {
   /**
    * Initializes the component, renders markup, and registers event listeners.
    *
-   * @param {string} rootID DOM ID of the root node.
    * @param {ReactReconcileTransaction|ReactServerRenderingTransaction} transaction
+   * @param {?object} nativeParent
+   * @param {?object} nativeContainerInfo
+   * @param {?object} context
    * @return {?string} Rendered markup to be inserted into the DOM.
    * @final
    * @internal
    */
   mountComponent: function(
-    rootID,
     transaction,
     nativeParent,
     nativeContainerInfo,
@@ -135,7 +136,6 @@ var ReactCompositeComponentMixin = {
   ) {
     this._context = context;
     this._mountOrder = nextMountID++;
-    this._rootNodeID = rootID;
     this._nativeParent = nativeParent;
     this._nativeContainerInfo = nativeContainerInfo;
 
@@ -299,7 +299,6 @@ var ReactCompositeComponentMixin = {
 
     var markup = ReactReconciler.mountComponent(
       this._renderedComponent,
-      rootID,
       transaction,
       nativeParent,
       nativeContainerInfo,
@@ -370,13 +369,12 @@ var ReactCompositeComponentMixin = {
    * @private
    */
   _maskContext: function(context) {
-    var maskedContext = null;
     var Component = this._currentElement.type;
     var contextTypes = Component.contextTypes;
     if (!contextTypes) {
       return emptyObject;
     }
-    maskedContext = {};
+    var maskedContext = {};
     for (var contextName in contextTypes) {
       maskedContext[contextName] = context[contextName];
     }
@@ -762,7 +760,6 @@ var ReactCompositeComponentMixin = {
       );
       var nextMarkup = ReactReconciler.mountComponent(
         this._renderedComponent,
-        this._rootNodeID,
         transaction,
         this._nativeParent,
         this._nativeContainerInfo,

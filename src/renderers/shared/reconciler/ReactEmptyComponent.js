@@ -11,55 +11,19 @@
 
 'use strict';
 
-var ReactElement = require('ReactElement');
-var ReactReconciler = require('ReactReconciler');
-
-var assign = require('Object.assign');
-
-var placeholderElement;
+var emptyComponentFactory;
 
 var ReactEmptyComponentInjection = {
-  injectEmptyComponent: function(component) {
-    placeholderElement = ReactElement.createElement(component);
+  injectEmptyComponentFactory: function(factory) {
+    emptyComponentFactory = factory;
   },
 };
 
-var ReactEmptyComponent = function(instantiate) {
-  this._currentElement = null;
-  this._rootNodeID = null;
-  this._renderedComponent = instantiate(placeholderElement);
+var ReactEmptyComponent = {
+  create: function(instantiate) {
+    return emptyComponentFactory(instantiate);
+  },
 };
-assign(ReactEmptyComponent.prototype, {
-  construct: function(element) {
-  },
-  mountComponent: function(
-    rootID,
-    transaction,
-    nativeParent,
-    nativeContainerInfo,
-    context
-  ) {
-    this._rootNodeID = rootID;
-    return ReactReconciler.mountComponent(
-      this._renderedComponent,
-      rootID,
-      transaction,
-      nativeParent,
-      nativeContainerInfo,
-      context
-    );
-  },
-  receiveComponent: function() {
-  },
-  getNativeNode: function() {
-    return ReactReconciler.getNativeNode(this._renderedComponent);
-  },
-  unmountComponent: function(rootID, transaction, context) {
-    ReactReconciler.unmountComponent(this._renderedComponent);
-    this._rootNodeID = null;
-    this._renderedComponent = null;
-  },
-});
 
 ReactEmptyComponent.injection = ReactEmptyComponentInjection;
 

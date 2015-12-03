@@ -16,7 +16,6 @@ var MorphingComponent;
 var React;
 var ReactDOM;
 var ReactCurrentOwner;
-var ReactMount;
 var ReactPropTypes;
 var ReactServerRendering;
 var ReactTestUtils;
@@ -34,7 +33,6 @@ describe('ReactCompositeComponent', function() {
     ReactCurrentOwner = require('ReactCurrentOwner');
     ReactPropTypes = require('ReactPropTypes');
     ReactTestUtils = require('ReactTestUtils');
-    ReactMount = require('ReactMount');
     ReactServerRendering = require('ReactServerRendering');
     ReactUpdates = require('ReactUpdates');
 
@@ -139,16 +137,24 @@ describe('ReactCompositeComponent', function() {
   });
 
   it('should not cache old DOM nodes when switching constructors', function() {
-    var instance = <ChildUpdates renderAnchor={true} anchorClassOn={false}/>;
-    instance = ReactTestUtils.renderIntoDocument(instance);
-    instance.setProps({anchorClassOn: true});  // Warm any cache
-    instance.setProps({renderAnchor: false});  // Clear out the anchor
-    // rerender
-    instance.setProps({renderAnchor: true, anchorClassOn: false});
-    var anchor = instance.getAnchor();
-    var actualDOMAnchorNode = ReactDOM.findDOMNode(anchor);
-    expect(actualDOMAnchorNode.className).toBe('');
-    expect(actualDOMAnchorNode).toBe(anchor.getDOMNode());
+    var container = document.createElement('div');
+    var instance = ReactDOM.render(
+      <ChildUpdates renderAnchor={true} anchorClassOn={false}/>,
+      container
+    );
+    ReactDOM.render(  // Warm any cache
+      <ChildUpdates renderAnchor={true} anchorClassOn={true}/>,
+      container
+    );
+    ReactDOM.render(  // Clear out the anchor
+      <ChildUpdates renderAnchor={false} anchorClassOn={true}/>,
+      container
+    );
+    ReactDOM.render(  // rerender
+      <ChildUpdates renderAnchor={true} anchorClassOn={false}/>,
+      container
+    );
+    expect(instance.getAnchor().className).toBe('');
   });
 
   it('should auto bind methods and values correctly', function() {
@@ -383,8 +389,10 @@ describe('ReactCompositeComponent', function() {
     expect(console.error.calls.length).toBe(1);
     expect(console.error.argsForCall[0][0]).toBe(
       'Warning: setState(...): Cannot update during an existing state ' +
-      'transition (such as within `render`). Render methods should be a pure ' +
-      'function of props and state.'
+      'transition (such as within `render` or another component\'s ' +
+      'constructor). Render methods should be a pure function of props and ' +
+      'state; constructor side-effects are an anti-pattern, but can be moved ' +
+      'to `componentWillMount`.'
     );
 
     // The setState call is queued and then executed as a second pass. This
@@ -399,71 +407,6 @@ describe('ReactCompositeComponent', function() {
     expect(instance).toBe(instance2);
     expect(renderedState).toBe(1);
     expect(instance2.state.value).toBe(1);
-  });
-
-  it('should not allow `setProps` on unmounted components', function() {
-    var container = document.createElement('div');
-    document.body.appendChild(container);
-
-    var Component = React.createClass({
-      render: function() {
-        return <div />;
-      },
-    });
-
-    var instance = <Component />;
-    expect(instance.setProps).not.toBeDefined();
-
-    instance = ReactDOM.render(instance, container);
-    expect(function() {
-      instance.setProps({value: 1});
-    }).not.toThrow();
-    expect(console.error.calls.length).toBe(1);  // setProps deprecated
-
-    ReactDOM.unmountComponentAtNode(container);
-    expect(function() {
-      instance.setProps({value: 2});
-    }).not.toThrow();
-
-    expect(console.error.calls.length).toBe(2);
-    expect(console.error.argsForCall[1][0]).toBe(
-      'Warning: setProps(...): Can only update a mounted or ' +
-      'mounting component. This usually means you called setProps() on an ' +
-      'unmounted component. This is a no-op. Please check the code for the ' +
-      'Component component.'
-    );
-  });
-
-  it('should only allow `setProps` on top-level components', function() {
-    var container = document.createElement('div');
-    document.body.appendChild(container);
-
-    var innerInstance;
-
-    var Inner = React.createClass({
-      render: function() {
-        return <div />;
-      },
-    });
-    var Component = React.createClass({
-      render: function() {
-        return <div><Inner ref="inner" /></div>;
-      },
-      componentDidMount: function() {
-        innerInstance = this.refs.inner;
-      },
-    });
-    ReactDOM.render(<Component />, container);
-
-    expect(innerInstance).not.toBe(undefined);
-    expect(function() {
-      innerInstance.setProps({value: 1});
-    }).toThrow(
-      'setProps(...): You called `setProps` on a component with a parent. ' +
-      'This is an anti-pattern since props will get reactively updated when ' +
-      'rendered. Instead, change the owner\'s `render` method to pass the ' +
-      'correct value as props to the component where it is created.'
-    );
   });
 
   it('should cleanup even if render() fatals', function() {
@@ -487,8 +430,6 @@ describe('ReactCompositeComponent', function() {
     var container = document.createElement('div');
     var innerUnmounted = false;
 
-    spyOn(ReactMount, 'purgeID').andCallThrough();
-
     var Component = React.createClass({
       render: function() {
         return (
@@ -501,11 +442,6 @@ describe('ReactCompositeComponent', function() {
     });
     var Inner = React.createClass({
       componentWillUnmount: function() {
-        // It's important that ReactMount.purgeID is called after any component
-        // lifecycle methods, because a componentWillUnmount implementation is
-        // likely to call ReactDOM.findDOMNode(this), which will repopulate the
-        // node cache after it's been cleared, causing a memory leak.
-        expect(ReactMount.purgeID.calls.length).toBe(0);
         innerUnmounted = true;
       },
       render: function() {
@@ -516,12 +452,6 @@ describe('ReactCompositeComponent', function() {
     ReactDOM.render(<Component />, container);
     ReactDOM.unmountComponentAtNode(container);
     expect(innerUnmounted).toBe(true);
-
-    // The text and both <div /> elements and their wrappers each call
-    // unmountIDFromEnvironment which calls purgeID, for a total of 3.
-    // TODO: Test the effect of this. E.g. does the node cache get repopulated
-    // after a getDOMNode call?
-    expect(ReactMount.purgeID.calls.length).toBe(3);
   });
 
   it('should warn when shouldComponentUpdate() returns undefined', function() {
